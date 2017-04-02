@@ -1,10 +1,7 @@
 class Game
+  attr_reader :hands
   def initialize(*hands)
     @hands = hands
-  end
-
-  def hands
-    @hands
   end
 
   def result
@@ -13,17 +10,19 @@ class Game
 end
 
 class Result
+  attr_reader :hands
   def initialize(received_hands)
     @hands = PokerHand.identify_hands(received_hands)
   end
 
-  def hands
-    @hands
+  def quote
+    <<~EOL.delete("\n")
+    #{best_hand.player} wins with #{best_hand.high_card.name}
+    -high #{best_hand.rate}
+    EOL
   end
 
-  def quote
-    "#{best_hand.player} wins with #{best_hand.high_card.name}-high #{best_hand.rate}"
-  end
+  private
 
   def best_hand
     @hands.max
@@ -31,10 +30,12 @@ class Result
 end
 
 class PokerHand
-  POINTS = {"straight flush" => 9, "four of a kind" => 8, "full house" => 7, "flush" => 6,
-    "straight" => 5, "three of a kind" => 4, "two pairs" => 3, "pair" => 2, "high card" => 1}
-
   include Comparable
+  attr_reader :player, :cards
+  POINTS = { 'straight flush' => 9, 'four of a kind' => 8, 'full house' => 7,
+             'flush' => 6, 'straight' => 5, 'three of a kind' => 4,
+             'two pairs' => 3, 'pair' => 2, 'high card' => 1 }.freeze
+
   def initialize(args)
     @player = args[:player]
     @cards = Card.identify_cards(args[:cards])
@@ -48,14 +49,6 @@ class PokerHand
     hands
   end
 
-  def player
-    @player
-  end
-
-  def cards
-    @cards
-  end
-
   def points
     POINTS[rate]
   end
@@ -63,47 +56,38 @@ class PokerHand
   def rate
     case group_cards.length
     when 2
-      return "four of a kind" if group_of?(4)
-      "full house"
+      return 'four of a kind' if group_of?(4)
+      'full house'
     when 3
-      return "three of a kind" if group_of?(3)
-      "two pairs"
+      return 'three of a kind' if group_of?(3)
+      'two pairs'
     when 4
-      "pair"
+      'pair'
     when 5
-      return "straight flush" if straight? && same_suit?
-      return "flush" if same_suit?
-      return "straight" if straight?
-      "high card"
+      return 'straight flush' if straight? && same_suit?
+      return 'flush' if same_suit?
+      return 'straight' if straight?
+      'high card'
     end
   end
 
   def high_card
-    case rate
-    when "four of a kind"
-      return group_of(4).max
-    when "full house"
-      return group_of(3).max
-    when "three of a kind"
-      return group_of(3).max
-    when "pair"
-      return group_of(2).max
-    end
-    highest_card
+    card = { 'four of a kind' => group_of(4).max,
+             'full house' => group_of(3).max,
+             'three of a kind' => group_of(3).max,
+             'pair' => group_of(2).max }
+    card[rate] || highest_card
   end
 
   def other_values
-    case rate
-    when "two pairs"
-      return values(group_of(1))
-    when "pair"
-      return values(cards - group_of(2))
-    when "high card"
-      return values(cards - [highest_card])
-    end
+    values = { 'two pairs' => values(group_of(1)),
+               'pair' => values(cards - group_of(2)),
+               'high card' => values(cards - [highest_card]) }
+    values[rate]
   end
 
   private
+
   def values(other_cards)
     values = []
     other_cards.each { |card| values << card.value }
@@ -115,14 +99,14 @@ class PokerHand
   end
 
   def group_of?(card_quantity)
-    group_cards.each do |value, cards|
+    group_cards.each do |_value, cards|
       return true if cards.length == card_quantity
     end
     false
   end
 
   def group_of(card_quantity)
-    group_cards.each do |value, cards|
+    group_cards.each do |_value, cards|
       return cards if cards.length == card_quantity
     end
   end
@@ -151,16 +135,13 @@ class PokerHand
 end
 
 class Card
-  CARD_VALUES = {T: 10, J: 11, Q: 12, K: 13, A: 14}
-  CARD_NAMES = {"1" => "One", "2" => "Two", "3" => "Three", "4" => "Four",
-    "5" => "Five", "6" => "Six", "7" => "Seven", "8" => "Eight", "9" => "Nine",
-    "T" => "Ten", "J" => "Jack", "Q" => "Queen", "K" => "King", "A" => "Ace"}
-
   include Comparable
-  def initialize(code)
-    @index = code[0]
-    @suit = code[1]
-  end
+  attr_reader :suit
+  CARD_VALUES = { T: 10, J: 11, Q: 12, K: 13, A: 14 }.freeze
+  CARD_NAMES = { '1' => 'One', '2' => 'Two', '3' => 'Three', '4' => 'Four',
+                 '5' => 'Five', '6' => 'Six', '7' => 'Seven', '8' => 'Eight',
+                 '9' => 'Nine', 'T' => 'Ten', 'J' => 'Jack', 'Q' => 'Queen',
+                 'K' => 'King', 'A' => 'Ace' }.freeze
 
   def self.identify_cards(pokerhand_cards)
     cards = []
@@ -170,12 +151,13 @@ class Card
     cards
   end
 
-  def value
-    value = index_letter? ? CARD_VALUES[@index.to_sym] : @index.to_i
+  def initialize(code)
+    @index = code[0]
+    @suit = code[1]
   end
 
-  def suit
-    @suit
+  def value
+    index_letter? ? CARD_VALUES[@index.to_sym] : @index.to_i
   end
 
   def name
@@ -183,8 +165,9 @@ class Card
   end
 
   private
+
   def index_letter?
-    @index.to_i == 0
+    @index.to_i.zero?
   end
 
   def <=>(other)
